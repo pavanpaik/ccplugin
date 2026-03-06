@@ -90,6 +90,28 @@ Claude Code's local plugin loader reads directly from the filesystem. This tool 
 - The `installed_plugins.json` format is reverse-engineered and may change between Claude Code versions.
 - Handles the known `settings.local.json` merge bug automatically (creates `enabledPlugins` key in main settings when using `--scope local`).
 
+## Native Claude Code Commands
+
+ccplugin ships as a Claude Code plugin itself. Install it as a plugin to get `/ccplugin-*` slash commands directly inside Claude Code:
+
+```bash
+# Install ccplugin as a plugin (gives you native slash commands)
+ccplugin install https://github.com/pavanpaik/ccplugin
+```
+
+Once installed, restart Claude Code and use:
+
+| Slash command | Equivalent CLI |
+|---|---|
+| `/ccplugin-install <source> [name] [--scope]` | `ccplugin install …` |
+| `/ccplugin-uninstall <name> [--scope]` | `ccplugin uninstall …` |
+| `/ccplugin-update <name>` | `ccplugin update …` |
+| `/ccplugin-list` | `ccplugin list` |
+| `/ccplugin-info <name>` | `ccplugin info …` |
+| `/ccplugin-doctor [--verbose]` | `ccplugin doctor` |
+
+The slash commands delegate directly to the `ccplugin` CLI binary — they are thin prompt wrappers, not a parallel implementation.
+
 ## Requirements
 
 - Python 3.9+

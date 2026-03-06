@@ -1,0 +1,17 @@
+{
+  "name": "ccplugin",
+  "version": "1.0.0",
+  "description": "Local Claude Code Plugin Manager — install plugins from any Git URL or local path",
+  "author": {
+    "name": "pavanpaik",
+    "url": "https://github.com/pavanpaik/ccplugin"
+  },
+  "commands": [
+    "ccplugin-install",
+    "ccplugin-uninstall",
+    "ccplugin-update",
+    "ccplugin-list",
+    "ccplugin-info",
+    "ccplugin-doctor"
+  ]
+}
