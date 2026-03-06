@@ -102,7 +102,9 @@ def read_json(path: Path) -> dict:
 
 def write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)  # atomic on POSIX; best-effort on Windows
 
 
 def short_hash(s: str) -> str:
@@ -189,9 +191,11 @@ def resolve_plugin(
         if clone_target.exists():
             log("Updating cached repo...")
             try:
-                run_git(["pull", "--ff-only"], cwd=clone_target)
+                # shallow clones can't do pull --ff-only; fetch+reset works reliably
+                run_git(["fetch", "--depth", "1", "origin"], cwd=clone_target)
+                run_git(["reset", "--hard", "origin/HEAD"], cwd=clone_target)
             except subprocess.CalledProcessError:
-                warn("Pull failed, re-cloning...")
+                warn("Fetch failed, re-cloning...")
                 shutil.rmtree(clone_target, ignore_errors=True)
                 log(f"Cloning {source}...")
                 run_git(["clone", "--depth", "1", source, str(clone_target)])
@@ -259,6 +263,10 @@ def resolve_plugin(
 
     name = plugin_meta.get("name") or target_name or plugin_dir.name
 
+    # Guard against path traversal (e.g. "../../../etc/passwd")
+    if "/" in name or "\\" in name or name in (".", ".."):
+        error(f'Invalid plugin name "{name}": must not contain path separators')
+
     return {
         "plugin_dir": plugin_dir,
         "plugin_name": name,
@@ -282,14 +290,22 @@ def cmd_install(source: str, target_name: Optional[str], scope: str) -> None:
     if desc := plugin_meta.get("description"):
         log(f"  {Colors.DIM}{desc}{Colors.RESET}")
 
-    # Copy to local plugins directory
+    # Copy to local plugins directory (atomic: copy to tmp, then replace)
     install_path = LOCAL_PLUGINS_DIR / plugin_name
     LOCAL_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_path = LOCAL_PLUGINS_DIR / f".tmp-{plugin_name}"
+
+    if tmp_path.exists():
+        shutil.rmtree(tmp_path)
+    try:
+        shutil.copytree(plugin_dir, tmp_path)
+    except Exception as e:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+        error(f"Failed to copy plugin files: {e}")
 
     if install_path.exists():
         shutil.rmtree(install_path)
-
-    shutil.copytree(plugin_dir, install_path)
+    tmp_path.rename(install_path)
     log(f"Installed to {install_path}")
 
     # Register in installed_plugins.json
@@ -303,6 +319,7 @@ def cmd_install(source: str, target_name: Optional[str], scope: str) -> None:
         "installPath": str(install_path),
         "version": plugin_meta.get("version", "0.0.0"),
         "source": source if is_git_url(source) else str(Path(source).resolve()),
+        "targetName": target_name,
         "installedAt": datetime.now(timezone.utc).isoformat(),
         "installedBy": "ccplugin",
     }
@@ -448,8 +465,7 @@ def cmd_update(plugin_name: str) -> None:
     if not is_git_url(source):
         warn(f"Source is a local path ({source}). Re-copying...")
 
-    base_name = plugin_name.split("@")[0]
-    cmd_install(source, base_name, record.get("scope", "user"))
+    cmd_install(source, record.get("targetName"), record.get("scope", "user"))
 
 
 def cmd_info(plugin_name: str) -> None:
@@ -759,7 +775,6 @@ def cmd_doctor(verbose: bool = False) -> None:
     _section("User Settings")
 
     user_settings = read_json(USER_SETTINGS_FILE)
-    user_local_settings = read_json(USER_LOCAL_SETTINGS_FILE)
 
     # enabledPlugins key existence (needed for local scope merge)
     has_enabled = "enabledPlugins" in user_settings
