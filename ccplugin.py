@@ -23,15 +23,35 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
-import os
 import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+try:
+    import fcntl as _fcntl
+
+    @contextlib.contextmanager
+    def _lock(path: Path):
+        """Exclusive advisory lock on a lockfile (POSIX)."""
+        lock_path = path.with_suffix(".lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(lock_path, "w") as fh:
+            _fcntl.flock(fh, _fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                _fcntl.flock(fh, _fcntl.LOCK_UN)
+
+except ImportError:  # Windows — no fcntl
+    @contextlib.contextmanager
+    def _lock(path: Path):
+        yield
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 
@@ -193,7 +213,15 @@ def resolve_plugin(
             try:
                 # shallow clones can't do pull --ff-only; fetch+reset works reliably
                 run_git(["fetch", "--depth", "1", "origin"], cwd=clone_target)
-                run_git(["reset", "--hard", "origin/HEAD"], cwd=clone_target)
+                # origin/HEAD may not be set on all remotes; fall back to common branch names
+                for ref in ("origin/HEAD", "origin/main", "origin/master"):
+                    try:
+                        run_git(["reset", "--hard", ref], cwd=clone_target)
+                        break
+                    except subprocess.CalledProcessError:
+                        continue
+                else:
+                    raise subprocess.CalledProcessError(1, "reset", "no resolvable ref")
             except subprocess.CalledProcessError:
                 warn("Fetch failed, re-cloning...")
                 shutil.rmtree(clone_target, ignore_errors=True)
@@ -308,10 +336,7 @@ def cmd_install(source: str, target_name: Optional[str], scope: str) -> None:
     tmp_path.rename(install_path)
     log(f"Installed to {install_path}")
 
-    # Register in installed_plugins.json
-    installed = read_json(INSTALLED_PLUGINS_FILE)
-    installed.setdefault("plugins", {})
-
+    # Register in installed_plugins.json and enable in settings (locked)
     plugin_key = f"{plugin_name}@local"
     record: dict[str, Any] = {
         "scope": scope,
@@ -328,38 +353,44 @@ def cmd_install(source: str, target_name: Optional[str], scope: str) -> None:
     if git_commit_sha:
         record["gitCommitSha"] = git_commit_sha
 
-    # Store as array (matches Claude Code's internal format)
-    records = installed["plugins"].get(plugin_key, [])
-    if not isinstance(records, list):
-        records = []
+    with _lock(INSTALLED_PLUGINS_FILE):
+        installed = read_json(INSTALLED_PLUGINS_FILE)
+        installed.setdefault("plugins", {})
 
-    # Remove existing entry for same scope/project
-    records = [
-        r
-        for r in records
-        if not (r.get("scope") == scope and r.get("projectPath") == record.get("projectPath"))
-    ]
-    records.append(record)
-    installed["plugins"][plugin_key] = records
+        # Store as array (matches Claude Code's internal format)
+        records = installed["plugins"].get(plugin_key, [])
+        if not isinstance(records, list):
+            records = []
 
-    write_json(INSTALLED_PLUGINS_FILE, installed)
+        # Remove existing entry for same scope/project
+        records = [
+            r
+            for r in records
+            if not (r.get("scope") == scope and r.get("projectPath") == record.get("projectPath"))
+        ]
+        records.append(record)
+        installed["plugins"][plugin_key] = records
+        write_json(INSTALLED_PLUGINS_FILE, installed)
+
     log("Registered in installed_plugins.json")
 
-    # Enable in settings
     settings_file = get_settings_file(scope)
-    settings = read_json(settings_file)
-    settings.setdefault("enabledPlugins", {})
-    settings["enabledPlugins"][plugin_key] = True
-    write_json(settings_file, settings)
+    with _lock(settings_file):
+        settings = read_json(settings_file)
+        settings.setdefault("enabledPlugins", {})
+        settings["enabledPlugins"][plugin_key] = True
+        write_json(settings_file, settings)
+
     log(f"Enabled in {settings_file}")
 
     # Workaround: local scope requires enabledPlugins key in main settings.json
     if scope == "local":
-        main_settings = read_json(USER_SETTINGS_FILE)
-        if "enabledPlugins" not in main_settings:
-            main_settings["enabledPlugins"] = {}
-            write_json(USER_SETTINGS_FILE, main_settings)
-            warn(f"Created enabledPlugins key in {USER_SETTINGS_FILE} (required for local scope merge)")
+        with _lock(USER_SETTINGS_FILE):
+            main_settings = read_json(USER_SETTINGS_FILE)
+            if "enabledPlugins" not in main_settings:
+                main_settings["enabledPlugins"] = {}
+                write_json(USER_SETTINGS_FILE, main_settings)
+                warn(f"Created enabledPlugins key in {USER_SETTINGS_FILE} (required for local scope merge)")
 
     success(f"{plugin_name} installed (scope: {scope}). Restart Claude Code to load.")
 
@@ -370,43 +401,45 @@ def cmd_uninstall(plugin_name: str, scope: str) -> None:
     plugin_key = plugin_name if "@" in plugin_name else f"{plugin_name}@local"
     base_name = plugin_name.split("@")[0]
 
-    # Remove from installed_plugins.json
-    installed = read_json(INSTALLED_PLUGINS_FILE)
+    # Remove from installed_plugins.json (locked)
     removed_path: Optional[str] = None
-    records = installed.get("plugins", {}).get(plugin_key, [])
+    with _lock(INSTALLED_PLUGINS_FILE):
+        installed = read_json(INSTALLED_PLUGINS_FILE)
+        records = installed.get("plugins", {}).get(plugin_key, [])
 
-    if records:
-        project_dir = str(get_project_dir())
-        matching = [
-            r
-            for r in records
-            if r.get("scope") == scope
-            and (scope == "user" or r.get("projectPath") == project_dir)
-        ]
+        if records:
+            project_dir = str(get_project_dir())
+            matching = [
+                r
+                for r in records
+                if r.get("scope") == scope
+                and (scope == "user" or r.get("projectPath") == project_dir)
+            ]
 
-        if matching:
-            removed_path = matching[0].get("installPath")
-            for m in matching:
-                records.remove(m)
+            if matching:
+                removed_path = matching[0].get("installPath")
+                for m in matching:
+                    records.remove(m)
 
-            if records:
-                installed["plugins"][plugin_key] = records
+                if records:
+                    installed["plugins"][plugin_key] = records
+                else:
+                    installed["plugins"].pop(plugin_key, None)
+
+                write_json(INSTALLED_PLUGINS_FILE, installed)
+                log("Removed from installed_plugins.json")
             else:
-                installed["plugins"].pop(plugin_key, None)
-
-            write_json(INSTALLED_PLUGINS_FILE, installed)
-            log("Removed from installed_plugins.json")
+                warn(f"No {scope}-scoped installation found for {plugin_key}")
         else:
-            warn(f"No {scope}-scoped installation found for {plugin_key}")
-    else:
-        warn(f"{plugin_key} not found in installed_plugins.json")
+            warn(f"{plugin_key} not found in installed_plugins.json")
 
-    # Remove from settings
+    # Remove from settings (locked)
     settings_file = get_settings_file(scope)
-    settings = read_json(settings_file)
-    if settings.get("enabledPlugins", {}).pop(plugin_key, None) is not None:
-        write_json(settings_file, settings)
-        log(f"Removed from {settings_file}")
+    with _lock(settings_file):
+        settings = read_json(settings_file)
+        if settings.get("enabledPlugins", {}).pop(plugin_key, None) is not None:
+            write_json(settings_file, settings)
+            log(f"Removed from {settings_file}")
 
     # Remove cached plugin files
     local_path = LOCAL_PLUGINS_DIR / base_name
@@ -578,11 +611,9 @@ def cmd_doctor(verbose: bool = False) -> None:
     _section("Environment")
 
     # Git
-    git_ok = False
     try:
         result = subprocess.run(["git", "--version"], capture_output=True, text=True, check=True)
-        git_version = result.stdout.strip()
-        git_ok = _check(True, "Git available", git_version)
+        _check(True, "Git available", result.stdout.strip())
     except (subprocess.CalledProcessError, FileNotFoundError):
         _check(False, "Git not found", "Required for remote plugin installs")
         issues.append("Git is not installed — remote installs will fail. Local path installs still work.")
