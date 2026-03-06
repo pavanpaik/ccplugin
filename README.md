@@ -20,23 +20,7 @@ Claude Code loads these as local plugins — no marketplace allowlist check.
 curl -fsSL https://raw.githubusercontent.com/pavanpaik/ccplugin/main/install.sh | sh
 ```
 
-That's it. Downloads `ccplugin.py` to `~/.local/bin/ccplugin` and makes it executable.
-
-**Other options:**
-
-```bash
-# Download the script directly (no install.sh wrapper)
-curl -fsSL https://raw.githubusercontent.com/pavanpaik/ccplugin/main/ccplugin.py \
-  -o ~/.local/bin/ccplugin && chmod +x ~/.local/bin/ccplugin
-
-# Custom install dir
-CCPLUGIN_INSTALL_DIR=~/bin curl -fsSL https://raw.githubusercontent.com/pavanpaik/ccplugin/main/install.sh | sh
-
-# pip / pipx (if you prefer)
-pipx install git+https://github.com/pavanpaik/ccplugin.git
-```
-
-If `~/.local/bin` isn't in your `PATH` yet:
+Downloads `ccplugin` to `~/.local/bin` and makes it executable. If that directory isn't in your `PATH` yet:
 
 ```bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
@@ -97,30 +81,6 @@ ccplugin install https://github.com/org/plugin
 
 The key insight: **managed settings gates `claude plugin install` marketplace checks, but local plugin loading from the filesystem is unrestricted**.
 
-## Enterprise Distribution
-
-```bash
-# Build and publish to internal PyPI
-python -m build
-twine upload --repository-url https://pypi.internal.yourcompany.com/simple/ dist/*
-
-# Team members install with
-pip install --index-url https://pypi.internal.yourcompany.com/simple/ ccplugin
-
-# Or just copy the single file — it has zero dependencies
-scp ccplugin.py devbox:~/bin/ccplugin
-```
-
-## Comparison: Python vs Node.js
-
-|               | Python                  | Node.js               |
-|---------------|-------------------------|-----------------------|
-| Dependencies  | Zero (stdlib only)      | Zero (built-ins only) |
-| Distribution  | Single file, pip, pipx  | npx, npm              |
-| Enterprise fit | Python always available | Requires Node.js      |
-| Single file   | Yes (`ccplugin.py`)     | Yes (`ccplugin.mjs`)  |
-| Package manager | pip/pipx/internal PyPI | npm/internal registry |
-
 ## Caveats
 
 - Plugins installed this way won't auto-update via Claude Code's built-in mechanism. Use `ccplugin update` instead.
@@ -133,3 +93,24 @@ scp ccplugin.py devbox:~/bin/ccplugin
 - Python 3.9+
 - Git (for remote sources)
 - Claude Code v2.0.12+
+
+## [Other install methods](#other-install-methods)
+
+<a name="other-install-methods"></a>
+
+```bash
+# Download the script directly (no install.sh wrapper)
+curl -fsSL https://raw.githubusercontent.com/pavanpaik/ccplugin/main/ccplugin.py \
+  -o ~/.local/bin/ccplugin && chmod +x ~/.local/bin/ccplugin
+
+# Custom install dir
+CCPLUGIN_INSTALL_DIR=~/bin curl -fsSL https://raw.githubusercontent.com/pavanpaik/ccplugin/main/install.sh | sh
+
+# pipx
+pipx install git+https://github.com/pavanpaik/ccplugin.git
+
+# Enterprise: publish to internal PyPI
+python -m build
+twine upload --repository-url https://pypi.internal.yourcompany.com/simple/ dist/*
+pip install --index-url https://pypi.internal.yourcompany.com/simple/ ccplugin
+```
