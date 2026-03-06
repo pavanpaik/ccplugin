@@ -1,18 +1,20 @@
 # ccplugin
 
-Local Claude Code Plugin Manager — install plugins from **any** Git repo or local path, bypassing marketplace allowlist restrictions.
+Local Claude Code Plugin Manager — install plugins from **any** Git repo or local path using Claude Code's local plugin loading mechanism.
 
 Zero external dependencies. Just Python 3.9+ and Git.
 
+> **Disclaimer:** This tool is an exploration of Claude Code's local plugin loading capabilities. It uses undocumented internal formats that may change between Claude Code versions. Use it to experiment and understand how Claude Code loads plugins locally — not as a way to work around your organisation's policies. Always check with your IT or security team before installing third-party plugins in a managed environment.
+
 ## Why?
 
-If your enterprise managed settings restricts Claude Code to a single official marketplace, `claude plugin install` blocks third-party sources. This CLI sidesteps that by:
+Claude Code supports loading plugins directly from the local filesystem, independently of the marketplace. This tool makes that mechanism easy to use:
 
 1. **Cloning** the plugin source (Git repo or local path) to `~/.claude/plugins/cache/`
 1. **Copying** it to `~/.claude/plugins/local/<plugin-name>`
 1. **Registering** it in `installed_plugins.json` and `settings.json`
 
-Claude Code loads these as local plugins — no marketplace allowlist check.
+Claude Code picks these up as local plugins on next launch.
 
 ## Install
 
@@ -79,7 +81,7 @@ ccplugin install https://github.com/org/plugin
 └─ Enable in settings.json (scope-appropriate)
 ```
 
-The key insight: **managed settings gates `claude plugin install` marketplace checks, but local plugin loading from the filesystem is unrestricted**.
+Claude Code's local plugin loader reads directly from the filesystem. This tool writes the records that loader expects.
 
 ## Caveats
 

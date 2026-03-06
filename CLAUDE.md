@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Single-file Python CLI (`ccplugin.py`) that installs Claude Code plugins from any Git URL or local path, bypassing marketplace allowlist restrictions. Zero external dependencies — stdlib only.
+Single-file Python CLI (`ccplugin.py`) that installs Claude Code plugins from any Git URL or local path using Claude Code's local plugin loading mechanism. Zero external dependencies — stdlib only.
 
 ## Running Tests
 

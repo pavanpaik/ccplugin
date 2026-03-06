@@ -2,8 +2,8 @@
 """
 ccplugin - Local Claude Code Plugin Manager
 
-Installs plugins from any Git repo or local path as local plugins,
-bypassing marketplace allowlist restrictions.
+Installs plugins from any Git repo or local path using Claude Code's
+local plugin loading mechanism.
 
 Usage:
   ccplugin install <source> [plugin-name] [--scope user|project|local]
@@ -661,8 +661,8 @@ def cmd_doctor(verbose: bool = False) -> None:
                        "All marketplace additions are blocked")
                 issues.append(
                     "strictKnownMarketplaces is [] — no marketplaces can be added. "
-                    "However, ccplugin bypasses this by writing directly to enabledPlugins "
-                    "with isLocal: true. Skills, commands, and agents should still load."
+                    "However, ccplugin uses the local plugin loading path (isLocal: true) "
+                    "which loads from the filesystem directly. Skills, commands, and agents should still load."
                 )
             else:
                 allowed = []
@@ -680,7 +680,7 @@ def cmd_doctor(verbose: bool = False) -> None:
                 )
                 warnings.append(
                     f"Marketplace installs restricted to: {', '.join(allowed)}. "
-                    "ccplugin bypasses this via local plugin loading."
+                    "ccplugin loads plugins via the local filesystem path, which is separate from marketplace installs."
                 )
         else:
             _warn_check("strictKnownMarketplaces has unexpected format", str(type(strict_mkts)))
@@ -935,7 +935,7 @@ def cmd_doctor(verbose: bool = False) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ccplugin",
-        description="Local Claude Code Plugin Manager — install plugins from any source, bypassing marketplace allowlist restrictions.",
+        description="Local Claude Code Plugin Manager — install plugins from any source via Claude Code's local plugin loading mechanism.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
