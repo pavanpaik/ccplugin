@@ -17,20 +17,29 @@ Claude Code loads these as local plugins — no marketplace allowlist check.
 ## Install
 
 ```bash
-# Option 1: Run directly (single file, no install needed)
-chmod +x ccplugin.py
-./ccplugin.py install https://github.com/obra/superpowers
+curl -fsSL https://raw.githubusercontent.com/pavanpaik/ccplugin/main/install.sh | sh
+```
 
-# Option 2: pipx (isolated, recommended)
-pipx install .
+That's it. Downloads `ccplugin.py` to `~/.local/bin/ccplugin` and makes it executable.
 
-# Option 3: pip
-pip install .
+**Other options:**
 
-# Option 4: Publish to internal PyPI
-pip install build twine
-python -m build
-twine upload --repository internal dist/*
+```bash
+# Download the script directly (no install.sh wrapper)
+curl -fsSL https://raw.githubusercontent.com/pavanpaik/ccplugin/main/ccplugin.py \
+  -o ~/.local/bin/ccplugin && chmod +x ~/.local/bin/ccplugin
+
+# Custom install dir
+CCPLUGIN_INSTALL_DIR=~/bin curl -fsSL https://raw.githubusercontent.com/pavanpaik/ccplugin/main/install.sh | sh
+
+# pip / pipx (if you prefer)
+pipx install git+https://github.com/pavanpaik/ccplugin.git
+```
+
+If `~/.local/bin` isn't in your `PATH` yet:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 ```
 
 ## Usage
