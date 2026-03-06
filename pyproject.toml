@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "ccplugin"
+version = "0.1.0"
+description = "Local Claude Code Plugin Manager — install plugins from any Git repo or local path"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["claude", "claude-code", "plugins", "anthropic"]
+
+[project.scripts]
+ccplugin = "ccplugin:main"
+
+[tool.setuptools]
+py-modules = ["ccplugin"]
